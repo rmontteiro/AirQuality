@@ -37,22 +37,36 @@ Todos os produtos são imagens de nível 3 do Sentinel-5P/TROPOMI, disponíveis 
 5. `filterBounds` mantém as imagens que intersectam a área selecionada.
 6. O número de imagens é avaliado; a rotina para quando a coleção está vazia.
 7. `mean()` calcula a média temporal, pixel a pixel, das imagens disponíveis.
-8. `clip()` limita a imagem resultante ao estado ou município.
-9. O mapa exibe o raster, o contorno territorial, uma legenda específica e a quantidade de imagens utilizadas.
+8. `resample('bicubic')` define a interpolação usada durante a reprojeção e `focalMean()` aplica uma média focal com kernel gaussiano de 2 km.
+9. A imagem suavizada é deslocada pelo mínimo da faixa, recebe uma constante equivalente a 1% da amplitude e passa por uma transformação `log10`.
+10. `clip()` limita a imagem transformada ao estado ou município.
+11. O mapa exibe o raster, o contorno territorial, uma legenda contínua e a quantidade de imagens utilizadas.
 
 Por padrão, o seletor usa uma data de referência dez dias anterior à execução. No modo de período, a janela inicial cobre os 30 dias anteriores a essa referência. Essas escolhas reduzem a chance de selecionar dias ainda sem produto disponível, mas não garantem cobertura válida.
+
+## Tratamento espacial
+
+A combinação de reamostragem bicúbica e média focal gaussiana produz uma superfície visualmente contínua. Ela é adequada como recurso cartográfico exploratório, desde que o resultado seja identificado como suavizado.
+
+Esse tratamento não é krigagem. A krigagem é um estimador geoestatístico que depende de observações pontuais e de um modelo de semivariograma, incluindo forma, alcance, patamar e efeito pepita. O código atual não estima esses parâmetros, não produz variância de krigagem e não permite validação cruzada do interpolador.
+
+Para incorporar krigagem de forma metodologicamente defensável, seria necessário definir a estratégia de amostragem do raster, ajustar e validar um semivariograma por parâmetro e janela temporal, estabelecer distância máxima e vizinhança e comparar o erro de validação cruzada com métodos mais simples.
 
 ## Escalas de visualização
 
 As faixas são fixadas no código: CO de 0 a 0,05 mol/m²; NO₂ de 0 a 0,0002 mol/m²; HCHO de 0 a 0,0003 mol/m²; SO₂ de 0 a 0,0005 mol/m²; CH₄ de 1.750 a 1.900 ppb; O₃ de 0 a 0,15 mol/m²; e índice de aerossóis de -1 a 2. Todos usam uma sequência de preto, azul, roxo, ciano, verde, amarelo e vermelho.
 
-Esses limites controlam somente a renderização. Valores fora da faixa permanecem na imagem, mas aparecem saturados nas cores extremas.
+Antes da renderização, o valor mínimo configurado é subtraído da superfície e soma-se uma constante positiva de 1% da amplitude. A transformação `log10` é então aplicada. O deslocamento evita logaritmos de zero e permite tratar o índice de aerossóis, que possui mínimo negativo.
+
+Os limites controlam somente a renderização. Valores abaixo do mínimo são fixados no limite inferior; valores acima do máximo aparecem saturados na cor superior. A legenda informa a transformação e calcula seu rótulo central na posição correspondente da escala logarítmica.
 
 ## Limitações e cuidados de interpretação
 
 - O resultado é uma média temporal por pixel; o script não calcula estatísticas municipais nem séries temporais.
 - Não há filtro adicional por banda de qualidade, cobertura de nuvens ou incerteza além das máscaras já presentes nos produtos do catálogo.
 - A resolução, a frequência de revisita e a disponibilidade de pixels variam entre os produtos.
+- A suavização altera a aparência do campo espacial, pode ocultar descontinuidades e não aumenta a resolução efetiva do sensor.
+- A transformação logarítmica amplia diferenças entre valores baixos e comprime diferenças entre valores altos.
 - Grandezas de coluna atmosférica não representam diretamente concentrações medidas em superfície.
 - A mistura de coleções NRTI e OFFL pode introduzir diferenças de latência e processamento entre parâmetros.
 - O script não exporta imagens ou tabelas e não persiste os resultados fora da sessão do GEE.

@@ -2,17 +2,36 @@
 
 Aplicação interativa para o Google Earth Engine (GEE) que visualiza produtos atmosféricos do sensor TROPOMI, a bordo do satélite Sentinel-5P, sobre o estado do Espírito Santo e seus municípios.
 
-O painel permite escolher o parâmetro atmosférico, consultar um único dia ou um intervalo de datas e selecionar todo o estado ou um município. Para cada consulta, o script filtra a coleção, calcula a média temporal das imagens disponíveis e recorta o resultado para a área escolhida.
+O painel permite escolher o parâmetro atmosférico, consultar um único dia ou um intervalo de datas e selecionar todo o estado ou um município. Para cada consulta, o script filtra a coleção, calcula a média temporal das imagens disponíveis, aplica uma suavização espacial e apresenta o resultado em escala logarítmica.
+
+## Resultados ilustrativos
+
+As capturas abaixo mostram consultas para todo o Espírito Santo no período de 1º a 31 de março de 2026.
+
+![Distribuição espacial de dióxido de nitrogênio no Espírito Santo](docs/images/no2-marco-2026.png)
+
+*Dióxido de nitrogênio (NO₂): média de 60 imagens da coluna troposférica.*
+
+![Distribuição espacial de monóxido de carbono no Espírito Santo](docs/images/co-marco-2026.png)
+
+*Monóxido de carbono (CO): média de 439 imagens da densidade da coluna atmosférica.*
+
+![Distribuição espacial de metano no Espírito Santo](docs/images/ch4-marco-2026.png)
+
+*Metano (CH₄): média de 439 imagens da razão de mistura em ar seco, com destaque para o efeito da suavização espacial.*
+
+As capturas registram a execução que motivou esta atualização. No script versionado, a legenda também identifica explicitamente a transformação `log10` e posiciona o valor central de acordo com a escala transformada.
 
 ## Metodologia
 
-A aplicação executa uma análise exploratória de constituintes atmosféricos em cinco etapas:
+A aplicação executa uma análise exploratória de constituintes atmosféricos em seis etapas:
 
 1. Carrega os limites municipais e combina suas geometrias para representar o território estadual.
 2. Seleciona a coleção e a banda correspondentes ao parâmetro atmosférico escolhido.
 3. Filtra as imagens pelo intervalo temporal e pela interseção com o estado ou município selecionado.
-4. Calcula a média temporal, pixel a pixel, das observações disponíveis e recorta o resultado ao território analisado.
-5. Exibe o raster, o contorno territorial, a escala de cores e a quantidade de imagens utilizadas.
+4. Calcula a média temporal, pixel a pixel, das observações disponíveis.
+5. Aplica reamostragem bicúbica, média focal gaussiana com raio de 2 km e transformação `log10` deslocada pelo mínimo configurado.
+6. Recorta e exibe o raster, o contorno territorial, a escala de cores e a quantidade de imagens utilizadas.
 
 No modo **Um dia**, o intervalo vai da data escolhida até o início do dia seguinte. No modo **Período**, a data final informada também é incluída. Esse tratamento é necessário porque o limite final de `filterDate()` é exclusivo no Earth Engine.
 
@@ -36,12 +55,22 @@ Os limites territoriais são fornecidos pelo asset `projects/ee-aguascapixabas/a
 
 `OFFL` identifica produtos processados em modo offline, enquanto `NRTI` identifica produtos disponibilizados próximos ao tempo real. Essa diferença deve ser considerada ao comparar a atualidade e a consistência dos parâmetros.
 
+### Suavização espacial e escala logarítmica
+
+A continuidade visual resulta de duas operações: `resample('bicubic')` durante a reprojeção e `focalMean()` com kernel gaussiano de 2 km. Esse processamento reduz transições abruptas entre pixels, mas também altera a aparência espacial do produto original.
+
+O procedimento **não constitui krigagem geoestatística**: não há amostragem pontual, ajuste de semivariograma, parâmetros de efeito pepita, patamar ou alcance, nem estimativa da variância de predição. Uma implementação de krigagem exigiria a definição e validação desses elementos para cada variável e período.
+
+Para a renderização logarítmica, o código desloca cada valor pelo mínimo da faixa, adiciona 1% da amplitude como constante positiva e aplica `log10`. Esse deslocamento permite processar o índice de aerossóis, que admite valores negativos. A transformação serve apenas à visualização; unidades e valores científicos permanecem os do produto original.
+
 ### Limitações de interpretação
 
 - O resultado é uma média temporal por pixel, sem cálculo de estatísticas municipais ou séries temporais.
 - O script não aplica filtros adicionais de qualidade, incerteza ou cobertura de nuvens além das máscaras presentes nos produtos do catálogo.
 - Grandezas de coluna atmosférica não correspondem diretamente às concentrações medidas na superfície.
 - As escalas de cores controlam a visualização e não representam padrões legais de qualidade do ar.
+- A suavização pode sugerir continuidade onde não existem observações independentes e não deve ser interpretada como aumento da resolução do sensor.
+- A escala logarítmica amplia o contraste dos menores valores e comprime os maiores.
 - A média simples atribui o mesmo peso a todas as observações válidas.
 - O resultado não é exportado ou persistido fora da sessão do GEE.
 
@@ -51,6 +80,7 @@ Uma discussão ampliada das datas iniciais, faixas de visualização e cuidados 
 
 - `gee/monitoramento_atmosferico_es.js`: aplicação pronta para o Code Editor do GEE.
 - `docs/metodologia.md`: roteiro metodológico, bases utilizadas, parâmetros e limitações.
+- `docs/images/`: capturas ilustrativas das consultas de NO₂, CO e CH₄.
 
 ## Como executar
 

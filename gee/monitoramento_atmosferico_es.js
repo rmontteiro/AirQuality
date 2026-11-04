@@ -3,7 +3,7 @@
 // GOOGLE EARTH ENGINE
 // SENTINEL-5P / TROPOMI
 //
-// VERSÃO CONSOLIDADA
+// VERSÃO COM SUAVIZAÇÃO ESPACIAL E ESCALA LOGARÍTMICA
 //
 // FUNCIONALIDADES:
 //
@@ -20,7 +20,10 @@
 // 7. Municípios obtidos automaticamente do campo "nome".
 // 8. Legenda dinâmica específica para cada parâmetro.
 // 9. Apenas a legenda correspondente ao parâmetro selecionado é mostrada.
-// 10. Asset territorial:
+// 10. Legenda contínua compatível com a transformação logarítmica.
+// 11. Suavização espacial bicúbica e gaussiana para visualização.
+// 12. Escala logarítmica deslocada, inclusive para valores negativos.
+// 13. Asset territorial:
 //      projects/ee-aguascapixabas/assets/MUNICIPIOS_ES
 //
 // ============================================================================
@@ -1390,11 +1393,54 @@ var painelLegenda = ui.Panel({
 // 23. FUNÇÃO DE ATUALIZAÇÃO DA LEGENDA
 // ============================================================================
 
+function obterEscalaLog(config) {
+
+  var amplitude = config.max - config.min;
+  var epsilon = amplitude * 0.01;
+
+  if (epsilon <= 0) {
+    epsilon = 1e-10;
+  }
+
+  var minLog = Math.log(epsilon) / Math.LN10;
+  var maxLog = Math.log(amplitude + epsilon) / Math.LN10;
+  var meioLog = (minLog + maxLog) / 2;
+  var valorCentral =
+    config.min + Math.pow(10, meioLog) - epsilon;
+
+  return {
+    epsilon: epsilon,
+    min: minLog,
+    max: maxLog,
+    valorCentral: valorCentral
+  };
+
+}
+
+
+function formatarValorLegenda(valor, config) {
+
+  var amplitude = Math.abs(config.max - config.min);
+  var casasDecimais =
+    amplitude < 0.001 ? 6 :
+    amplitude < 1 ? 3 :
+    0;
+
+  return valor
+    .toFixed(casasDecimais)
+    .replace('.', ',');
+
+}
+
+
 function atualizarLegenda(nomeParametro) {
 
 
   var config =
     parametros[nomeParametro];
+
+  var escalaLog =
+    obterEscalaLog(config);
 
 
   // Limpa a legenda anterior.
@@ -1423,6 +1469,32 @@ function atualizarLegenda(nomeParametro) {
 
         margin:
           '0 0 2px 0',
+
+        padding:
+          '0px'
+
+      }
+
+    })
+
+  );
+
+
+
+  painelLegenda.add(
+
+    ui.Label({
+
+      value:
+        'Visualização: log10 deslocada',
+
+      style: {
+
+        fontSize:
+          '9px',
+
+        margin:
+          '0 0 5px 0',
 
         padding:
           '0px'
@@ -1496,99 +1568,52 @@ function atualizarLegenda(nomeParametro) {
 
 
   // =========================================================================
-  // CLASSES DA LEGENDA
+  // GRADIENTE DA LEGENDA (CONTÍNUO)
   // =========================================================================
 
-  for (
-    var i = 0;
-    i < config.palette.length;
-    i++
-  ) {
+  var gradiente = ui.Thumbnail({
+    image: ee.Image.pixelLonLat().select('longitude'),
+    params: {
+      bbox: [0, 0, 1, 0.1],
+      dimensions: '200x12',
+      format: 'png',
+      min: 0,
+      max: 1,
+      palette: config.palette
+    },
+    style: {
+      stretch: 'horizontal',
+      margin: '0px 5px 2px 5px'
+    }
+  });
 
-
-    var caixaCor =
-      ui.Label({
-
-        value:
-          '',
-
-        style: {
-
-          backgroundColor:
-            config.palette[i],
-
-          padding:
-            '7px',
-
-          margin:
-            '0 6px 1px 0',
-
-          border:
-            '1px solid #777777'
-
-        }
-
-      });
+  painelLegenda.add(gradiente);
 
 
 
-    var textoValor =
-      ui.Label({
+  // =========================================================================
+  // RÓTULOS DA ESCALA
+  // =========================================================================
 
-        value:
-          config.legendLabels[i],
+  var painelRotulos = ui.Panel({
+    widgets: [
+      ui.Label(config.legendLabels[0], {fontSize: '10px', margin: '0px'}),
+      ui.Label(formatarValorLegenda(escalaLog.valorCentral, config), {
+        fontSize: '10px',
+        textAlign: 'center',
+        stretch: 'horizontal',
+        margin: '0px'
+      }),
+      ui.Label(config.legendLabels[config.legendLabels.length - 1], {fontSize: '10px', margin: '0px'})
+    ],
+    layout: ui.Panel.Layout.flow('horizontal'),
+    style: {
+      backgroundColor: 'rgba(255, 255, 255, 0)',
+      margin: '0px 5px 5px 5px'
+    }
+  });
 
-        style: {
-
-          fontSize:
-            '10px',
-
-          margin:
-            '2px 0 0 0',
-
-          padding:
-            '0px'
-
-        }
-
-      });
-
-
-
-    var linha =
-      ui.Panel({
-
-        widgets: [
-
-          caixaCor,
-
-          textoValor
-
-        ],
-
-        layout:
-          ui.Panel.Layout.flow(
-            'horizontal'
-          ),
-
-        style: {
-
-          margin:
-            '0px',
-
-          padding:
-            '0px'
-
-        }
-
-      });
-
-
-    painelLegenda.add(
-      linha
-    );
-
-  }
+  painelLegenda.add(painelRotulos);
 
 
 
@@ -1842,14 +1867,29 @@ function gerarVisualizacao(
       // IMAGEM RESULTANTE
       // =========================================================================
 
-      var imagem =
-        colecao
+      var imagemOriginal = colecao.mean();
 
-          .mean()
+      // Suavização cartográfica para continuidade visual. Este procedimento
+      // não é krigagem, pois não estima nem aplica um variograma.
+      var imagemSuavizada = imagemOriginal
+        .resample('bicubic')
+        .focalMean({
+          radius: 2000,
+          units: 'meters',
+          kernelType: 'gaussian'
+        });
 
-          .clip(
-            area.roi
-          );
+      // A imagem é deslocada pelo mínimo da escala antes do log10. Isso
+      // mantém o domínio positivo e permite visualizar parâmetros com valores
+      // negativos, como o índice de aerossóis.
+      var escalaLog = obterEscalaLog(config);
+      var imagemLog = imagemSuavizada
+        .max(config.min)
+        .subtract(config.min)
+        .add(escalaLog.epsilon)
+        .log10();
+
+      var imagemFinal = imagemLog.clip(area.roi);
 
 
 
@@ -1867,22 +1907,22 @@ function gerarVisualizacao(
 
       Map.addLayer(
 
-        imagem,
+        imagemFinal,
 
         {
 
           min:
-            config.min,
+            escalaLog.min,
 
           max:
-            config.max,
+            escalaLog.max,
 
           palette:
             config.palette
 
         },
 
-        nomeParametro,
+        nomeParametro + ' — suavização gaussiana / log10',
 
         true
 
@@ -2022,8 +2062,20 @@ function gerarVisualizacao(
 
 
       print(
-        'Imagem resultante:',
-        imagem
+        'Imagem média original:',
+        imagemOriginal
+      );
+
+
+      print(
+        'Imagem suavizada (bicúbica + média focal gaussiana de 2 km):',
+        imagemSuavizada
+      );
+
+
+      print(
+        'Imagem final (log10 deslocada):',
+        imagemFinal
       );
 
     }
