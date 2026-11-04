@@ -63,6 +63,8 @@ O procedimento **não constitui krigagem geoestatística**: não há amostragem 
 
 Para a renderização logarítmica, o código desloca cada valor pelo mínimo da faixa, adiciona 1% da amplitude como constante positiva e aplica `log10`. Esse deslocamento permite processar o índice de aerossóis, que admite valores negativos. A transformação serve apenas à visualização; unidades e valores científicos permanecem os do produto original.
 
+Os limites transformados são calculados no lado do cliente com `Math.log(x) / Math.LN10`, mantendo números JavaScript puros em `Map.addLayer()`. O Índice de Aerossóis utiliza a faixa de -1 a 3 para reduzir a saturação em eventos intensos de fumaça ou poeira.
+
 ### Limitações de interpretação
 
 - O resultado é uma média temporal por pixel, sem cálculo de estatísticas municipais ou séries temporais.

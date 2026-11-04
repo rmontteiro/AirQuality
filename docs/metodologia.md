@@ -54,9 +54,11 @@ Para incorporar krigagem de forma metodologicamente defensável, seria necessár
 
 ## Escalas de visualização
 
-As faixas são fixadas no código: CO de 0 a 0,05 mol/m²; NO₂ de 0 a 0,0002 mol/m²; HCHO de 0 a 0,0003 mol/m²; SO₂ de 0 a 0,0005 mol/m²; CH₄ de 1.750 a 1.900 ppb; O₃ de 0 a 0,15 mol/m²; e índice de aerossóis de -1 a 2. Todos usam uma sequência de preto, azul, roxo, ciano, verde, amarelo e vermelho.
+As faixas são fixadas no código: CO de 0 a 0,05 mol/m²; NO₂ de 0 a 0,0002 mol/m²; HCHO de 0 a 0,0003 mol/m²; SO₂ de 0 a 0,0005 mol/m²; CH₄ de 1.750 a 1.900 ppb; O₃ de 0 a 0,15 mol/m²; e índice de aerossóis de -1 a 3. Todos usam uma sequência de preto, azul, roxo, ciano, verde, amarelo e vermelho.
 
 Antes da renderização, o valor mínimo configurado é subtraído da superfície e soma-se uma constante positiva de 1% da amplitude. A transformação `log10` é então aplicada. O deslocamento evita logaritmos de zero e permite tratar o índice de aerossóis, que possui mínimo negativo.
+
+Os limites logarítmicos são calculados no lado do cliente com `Math.log(x) / Math.LN10`. Assim, `Map.addLayer()` recebe números JavaScript puros em `min` e `max`, evitando a passagem de objetos `ee.Number` aos parâmetros de visualização. A ampliação do limite superior do Índice de Aerossóis para 3 reduz a saturação da cor máxima em episódios intensos, embora não substitua uma calibração baseada na distribuição observada.
 
 Os limites controlam somente a renderização. Valores abaixo do mínimo são fixados no limite inferior; valores acima do máximo aparecem saturados na cor superior. A legenda informa a transformação e calcula seu rótulo central na posição correspondente da escala logarítmica.
 
